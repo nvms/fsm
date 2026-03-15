@@ -1,4 +1,8 @@
-# @prsm/fsm
+<p align="center">
+  <img src=".github/logo.svg" width="80" height="80" alt="fsm logo">
+</p>
+
+<h1 align="center">@prsm/fsm</h1>
 
 Non-deterministic finite state machine with time-based ticks, persistence, and multiple active states.
 
