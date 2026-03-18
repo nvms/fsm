@@ -94,7 +94,7 @@ function createMachine(config) {
     for (const t of transitions) {
       const fromStates = t.from !== undefined ? (Array.isArray(t.from) ? t.from : [t.from]) : [];
 
-      if (t.from !== undefined && !fromStates.some((s) => activeStates.has(s))) continue;
+      if (t.from !== undefined && !fromStates.every((s) => activeStates.has(s))) continue;
 
       if (t.from === undefined) {
         const toStates = Array.isArray(t.to) ? t.to : [t.to];

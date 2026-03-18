@@ -583,6 +583,49 @@ describe("Priority-based Transition Resolution", () => {
     expect(machine.has("alive")).toBe(false);
     expect(machine.has("healthy")).toBe(true); // Should remain unchanged
   });
+
+  it("should not fire array-from transition when only one from-state is active", () => {
+    const machine = createMachine({
+      data: {},
+      states: {
+        awake: 1,
+        alive: 0,
+        injured: 0,
+      },
+      transitions: [
+        {
+          from: ["awake", "alive"],
+          to: "injured",
+        },
+      ],
+    });
+
+    machine.step();
+    expect(machine.has("injured")).toBe(false);
+    expect(machine.has("awake")).toBe(true);
+  });
+
+  it("should fire array-from transition only when all from-states are active", () => {
+    const machine = createMachine({
+      data: {},
+      states: {
+        awake: 1,
+        alive: 1,
+        injured: 0,
+      },
+      transitions: [
+        {
+          from: ["awake", "alive"],
+          to: "injured",
+        },
+      ],
+    });
+
+    machine.step();
+    expect(machine.has("injured")).toBe(true);
+    expect(machine.has("awake")).toBe(false);
+    expect(machine.has("alive")).toBe(false);
+  });
 });
 
 import { loadMachine } from "../src/index";
