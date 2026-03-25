@@ -628,6 +628,226 @@ describe("Priority-based Transition Resolution", () => {
   });
 });
 
+describe("event payloads", () => {
+  it("should pass full arrays in state:exit and state:enter for array transitions", () => {
+    const exitSpy = vi.fn();
+    const enterSpy = vi.fn();
+
+    const machine = createMachine({
+      data: {},
+      states: { awake: 1, alive: 1, injured: 0, unconscious: 0 },
+      transitions: [
+        { from: ["awake", "alive"], to: ["injured", "unconscious"] },
+      ],
+    });
+
+    machine.on("state:exit", exitSpy);
+    machine.on("state:enter", enterSpy);
+    machine.step();
+
+    expect(exitSpy).toHaveBeenCalledTimes(2);
+    expect(exitSpy).toHaveBeenCalledWith({ state: "awake", to: ["injured", "unconscious"] });
+    expect(exitSpy).toHaveBeenCalledWith({ state: "alive", to: ["injured", "unconscious"] });
+
+    expect(enterSpy).toHaveBeenCalledTimes(2);
+    expect(enterSpy).toHaveBeenCalledWith({ state: "injured", from: ["awake", "alive"] });
+    expect(enterSpy).toHaveBeenCalledWith({ state: "unconscious", from: ["awake", "alive"] });
+  });
+
+  it("should pass arrays even for single from/to transitions", () => {
+    const exitSpy = vi.fn();
+    const enterSpy = vi.fn();
+
+    const machine = createMachine({
+      data: {},
+      states: { a: 1, b: 0 },
+      transitions: [{ from: "a", to: "b" }],
+    });
+
+    machine.on("state:exit", exitSpy);
+    machine.on("state:enter", enterSpy);
+    machine.step();
+
+    expect(exitSpy).toHaveBeenCalledWith({ state: "a", to: ["b"] });
+    expect(enterSpy).toHaveBeenCalledWith({ state: "b", from: ["a"] });
+  });
+
+  it("should fire state:exit after state is removed from activeStates", () => {
+    let hadStateDuringExit = null;
+
+    const machine = createMachine({
+      data: {},
+      states: { on: 1, off: 0 },
+      transitions: [{ from: "on", to: "off" }],
+    });
+
+    machine.on("state:exit", ({ state }) => {
+      hadStateDuringExit = machine.has(state);
+    });
+
+    machine.step();
+    expect(hadStateDuringExit).toBe(false);
+  });
+
+  it("should fire state:enter after state is added to activeStates", () => {
+    let hadStateDuringEnter = null;
+
+    const machine = createMachine({
+      data: {},
+      states: { on: 1, off: 0 },
+      transitions: [{ from: "on", to: "off" }],
+    });
+
+    machine.on("state:enter", ({ state }) => {
+      hadStateDuringEnter = machine.has(state);
+    });
+
+    machine.step();
+    expect(hadStateDuringEnter).toBe(true);
+  });
+
+  it("should fire transition event before state mutation", () => {
+    let statesDuringTransition = null;
+
+    const machine = createMachine({
+      data: {},
+      states: { a: 1, b: 0 },
+      transitions: [{ from: "a", to: "b" }],
+    });
+
+    machine.on("transition", () => {
+      statesDuringTransition = machine.state;
+    });
+
+    machine.step();
+    expect(statesDuringTransition).toEqual(["a"]);
+  });
+});
+
+describe("transition.action", () => {
+  it("should call action with data, from, and to", () => {
+    const actionSpy = vi.fn();
+
+    const machine = createMachine({
+      data: { x: 1 },
+      states: { a: 1, b: 0 },
+      transitions: [{ from: "a", to: "b", action: actionSpy }],
+    });
+
+    machine.step();
+    expect(actionSpy).toHaveBeenCalledWith({
+      data: { x: 1 },
+      from: ["a"],
+      to: ["b"],
+    });
+  });
+
+  it("should call both then and action in order", () => {
+    const order = [];
+
+    const machine = createMachine({
+      data: {},
+      states: { a: 1, b: 0 },
+      transitions: [{
+        from: "a",
+        to: "b",
+        then: () => order.push("then"),
+        action: () => order.push("action"),
+      }],
+    });
+
+    machine.step();
+    expect(order).toEqual(["then", "action"]);
+  });
+});
+
+describe("hook variants", () => {
+  it("should support onEnter and onExit as aliases", () => {
+    const order = [];
+
+    const machine = createMachine({
+      data: {},
+      states: { a: 1, b: 0 },
+      transitions: [{ from: "a", to: "b" }],
+      hooks: {
+        onExit: { a: () => order.push("onExit-a") },
+        onEnter: { b: () => order.push("onEnter-b") },
+      },
+    });
+
+    machine.step();
+    expect(order).toEqual(["onExit-a", "onEnter-b"]);
+  });
+
+  it("should call hooks.onTransition with from, to, and data", () => {
+    const spy = vi.fn();
+
+    const machine = createMachine({
+      data: { val: 42 },
+      states: { a: 1, b: 0 },
+      transitions: [{ from: "a", to: "b" }],
+      hooks: { onTransition: spy },
+    });
+
+    machine.step();
+    expect(spy).toHaveBeenCalledWith({
+      from: ["a"],
+      to: ["b"],
+      data: { val: 42 },
+    });
+  });
+
+  it("should support state-level enter and exit hooks", () => {
+    const order = [];
+
+    const machine = createMachine({
+      data: {},
+      states: {
+        a: { enter: () => order.push("enter-a"), exit: () => order.push("exit-a") },
+        b: { enter: () => order.push("enter-b") },
+      },
+      transitions: [{ from: "a", to: "b" }],
+    });
+
+    machine.step();
+    expect(order).toEqual(["exit-a", "enter-b"]);
+  });
+});
+
+describe("from-less transitions", () => {
+  it("should not re-enter an already active state", () => {
+    const machine = createMachine({
+      data: {},
+      states: { alive: 1, hungry: 0 },
+      transitions: [{ to: "hungry" }],
+    });
+
+    machine.step();
+    expect(machine.has("hungry")).toBe(true);
+
+    const enterSpy = vi.fn();
+    machine.on("state:enter", enterSpy);
+    machine.step();
+    expect(enterSpy).not.toHaveBeenCalled();
+  });
+
+  it("should enter state when not already active", () => {
+    const machine = createMachine({
+      data: { hunger: 0 },
+      states: { alive: 1, hungry: 0 },
+      transitions: [{ to: "hungry", when: (ctx) => ctx.get("hunger") > 50 }],
+    });
+
+    machine.step();
+    expect(machine.has("hungry")).toBe(false);
+
+    machine.data.hunger = 60;
+    machine.step();
+    expect(machine.has("hungry")).toBe(true);
+    expect(machine.has("alive")).toBe(true);
+  });
+});
+
 import { loadMachine } from "../src/index";
 
 describe("FSM Persistence", () => {

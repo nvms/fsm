@@ -132,22 +132,17 @@ function createMachine(config) {
     processStateTicks();
 
     const fired = [];
-    let transitionOccurred = false;
+    const found = findTransition();
 
-    do {
-      transitionOccurred = false;
-      const found = findTransition();
-      if (!found) break;
-
+    if (found) {
       const { t: transition, ctx, fromStates } = found;
       const toStates = transition.to !== undefined ? (Array.isArray(transition.to) ? transition.to : [transition.to]) : [];
 
       const actuallyFrom = fromStates.filter((s) => activeStates.has(s));
 
       actuallyFrom.forEach((fromState) => {
-        runHook("exit", fromState, toStates[0]);
-        runHook("onExit", fromState, toStates[0]);
-        emit("state:exit", { state: fromState, to: toStates[0] });
+        runHook("exit", fromState, toStates);
+        runHook("onExit", fromState, toStates);
       });
 
       if (typeof transition.then === "function") {
@@ -169,16 +164,18 @@ function createMachine(config) {
         }
       });
 
+      actuallyFrom.forEach((fromState) => {
+        emit("state:exit", { state: fromState, to: toStates });
+      });
+
       toStates.forEach((toState) => {
-        runHook("enter", toState, actuallyFrom[0]);
-        runHook("onEnter", toState, actuallyFrom[0]);
-        emit("state:enter", { state: toState, from: actuallyFrom[0] });
+        runHook("enter", toState, actuallyFrom);
+        runHook("onEnter", toState, actuallyFrom);
+        emit("state:enter", { state: toState, from: actuallyFrom });
       });
 
       fired.push({ from: actuallyFrom, to: toStates });
-      transitionOccurred = true;
-      break;
-    } while (transitionOccurred);
+    }
     emit("step", { state: Array.from(activeStates), data });
 
     return fired;
@@ -267,7 +264,6 @@ function createMachine(config) {
     has,
     save,
     tick,
-    stateTicks,
     _setSavedStateTicks: (data) => {
       savedStateTicks = data;
     },

@@ -125,6 +125,22 @@ const machine = createMachine({
 });
 ```
 
+## Transition Callbacks
+
+Transitions support two callback styles:
+
+```js
+{
+  from: "idle",
+  to: "running",
+  when: ctx => ctx.get("ready"),
+  then: ctx => ctx.set("startedAt", Date.now()),       // receives the ctx object
+  action: ({ data, from, to }) => log(from, "->", to)  // receives { data, from, to }
+}
+```
+
+Both `then` and `action` fire (in that order) if defined. `then` gets the same ctx object as `when`. `action` gets the raw data object and from/to arrays.
+
 ## Arrays in Transitions
 
 Use arrays to specify multiple from/to states:
@@ -152,45 +168,64 @@ const machine = createMachine({
     },
     exit: {
       off: () => console.log("powering up")
+    },
+    onTransition: ({ from, to, data }) => {
+      console.log(`${from} -> ${to}`)
     }
   }
 });
 ```
+
+`onEnter` and `onExit` work as aliases for `enter` and `exit`. Hooks can also be defined directly on state objects:
+
+```js
+const machine = createMachine({
+  states: {
+    off: {
+      exit: () => console.log("powering up")
+    },
+    on: {
+      enter: () => console.log("lights on")
+    }
+  },
+  transitions: [
+    { from: "off", to: "on", when: ctx => ctx.get("power") }
+  ]
+});
+```
+
+States defined as objects are considered initially active (truthy). Use `activeStates` in the config to override which states start active.
 
 ## Events
 
 Listen for state changes and ticks:
 
 ```js
-machine.on("transition", ({ from, to }) => {
-  // called before activeStates are mutated
+machine.on(“transition”, ({ from, to }) => {
+  // fires before activeStates are mutated
+  // from and to are arrays
 });
 
-machine.on("state:exit", ({ state, to }) => {
-  // called immediately after the old state is removed
+machine.on(“state:exit”, ({ state, to }) => {
+  // fires after the state is removed from activeStates
+  // machine.has(state) returns false here
+  // to is an array of destination states
 });
 
-machine.on("state:enter", ({ state, from }) => {
-  // called after the new state is added (machine.state reflects post-transition)
+machine.on(“state:enter”, ({ state, from }) => {
+  // fires after the state is added to activeStates
+  // machine.has(state) returns true here
+  // from is an array of origin states
 });
 
-machine.on("tick", ({ state, interval }) => {
-  // called after your tick function has executed but before transitions in that step
+machine.on(“tick”, ({ state, interval }) => {
+  // fires after tick function runs, before transitions
 });
 
-machine.on("step", ({ state, data }) => {
-  // called once per step(), after ticks and transitions
+machine.on(“step”, ({ state, data }) => {
+  // fires once per step(), after ticks and transitions
 });
 ```
-
-Notes:
-
-- “transition” handlers run before the machine’s activeStates set is updated.
-- “state:exit” runs immediately after exiting a state.
-- “state:enter” runs once the new state is active (machine.state reflects the post-transition set).
-- if you only care about reacting once *after* a transition, subscribe to `state:enter`.
-- “tick” fires after your tick function has executed but before transitions in that step.
-- “step” fires once per step(), after ticks and transitions.
 
 ## Persistence
 
